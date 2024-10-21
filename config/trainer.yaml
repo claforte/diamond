@@ -8,11 +8,11 @@ hydra:
   job:
     chdir: True
 
-wandb:
+comet:
   mode: disabled
   project: null
   entity: null
-  name: null
+  name: "test_diamond"
   group: null
   tags: null
   notes: null
@@ -68,10 +68,10 @@ denoiser:
   training:
     num_autoregressive_steps: 4
     start_after_epochs: 0
-    steps_first_epoch: 400
-    steps_per_epoch: 400
+    steps_first_epoch: 4 # was 400
+    steps_per_epoch: 4 # was 400
     sample_weights: null
-    batch_size: 64
+    batch_size: 8 # was 16, was 64
     grad_acc_steps: 2
     lr_warmup_steps: 100
     max_grad_norm: 10.0
@@ -92,10 +92,10 @@ upsampler:
   training:
     num_autoregressive_steps: 1
     start_after_epochs: 0
-    steps_first_epoch: 400
-    steps_per_epoch: 400
+    steps_first_epoch: 4 # was 400
+    steps_per_epoch: 4 # was 400
     sample_weights: null
-    batch_size: 8
+    batch_size: 4 # was 8
     grad_acc_steps: 4
     lr_warmup_steps: 100
     max_grad_norm: 10.0

@@ -8,6 +8,7 @@ from pathlib import Path
 import random
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import comet_ml # import before torch
 from omegaconf import OmegaConf
 import numpy as np
 import torch
@@ -268,7 +269,7 @@ def prompt_atari_game():
 
 def prompt_run_name(game):
     cfg_file = Path("config/trainer.yaml")
-    cfg_name = OmegaConf.load(cfg_file).wandb.name
+    cfg_name = OmegaConf.load(cfg_file).comet.name
     suffix = f"-{cfg_name}" if cfg_name is not None else ""
     name = game + suffix
     name_ = input(f"Confirm run name by pressing Enter (or enter a new name): {name}\n")
@@ -319,8 +320,3 @@ def try_until_no_except(func: Callable) -> None:
             continue
         else:
             break
-
-
-def wandb_log(logs: Logs, epoch: int):
-    for d in logs:
-        wandb.log({"epoch": epoch, **d})

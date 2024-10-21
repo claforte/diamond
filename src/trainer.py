@@ -4,6 +4,8 @@ import shutil
 import time
 from typing import List, Optional, Tuple
 
+import comet_ml # must import before torch
+from comet_ml import Experiment
 from hydra.utils import instantiate
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
@@ -36,6 +38,7 @@ from utils import (
 )
 
 
+
 class Trainer(StateDictMixin):
     def __init__(self, cfg: DictConfig, root_dir: Path) -> None:
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -56,9 +59,7 @@ class Trainer(StateDictMixin):
 
         # Init wandb
         if self._rank == 0:
-            try_until_no_except(
-                partial(wandb.init, config=OmegaConf.to_container(cfg, resolve=True), reinit=True, resume=True, **cfg.wandb)
-            )
+            self.experiment = Experiment(project_name="diamond-test")
 
         # Flags
         self._is_static_dataset = cfg.static_dataset.path is not None
@@ -74,7 +75,7 @@ class Trainer(StateDictMixin):
             num_to_keep=cfg.checkpointing.num_to_keep,
         )
         self._save_info_for_import_script = partial(
-            save_info_for_import_script, run_name=cfg.wandb.name, path_ckpt_dir=self._path_ckpt_dir
+            save_info_for_import_script, run_name=cfg.comet.name, path_ckpt_dir=self._path_ckpt_dir
         )
 
         # First time, init files hierarchy
@@ -83,7 +84,7 @@ class Trainer(StateDictMixin):
             path_config = Path("config") / "trainer.yaml"
             path_config.parent.mkdir(exist_ok=False, parents=False)
             shutil.move(".hydra/config.yaml", path_config)
-            wandb.save(str(path_config))
+            # wandb.save(str(path_config)) # claforte: TODO: replace with Comet equivalent, e.g. `log_parameters(hyper_params)`
             shutil.copytree(src=root_dir / "src", dst="./src")
             shutil.copytree(src=root_dir / "scripts", dst="./scripts")
         
@@ -283,7 +284,9 @@ class Trainer(StateDictMixin):
             # Logging
             to_log.append({"duration": (time.time() - start_time) / 3600})
             if self._rank == 0:
-                wandb_log(to_log, self.epoch)
+                self.experiment.log_current_epoch(self.epoch)
+                for i,step_log in enumerate(to_log[1:]): # skip the first item
+                    self.experiment.log_metrics(step_log, step=i)
             to_log = []
 
             # Checkpointing
@@ -294,7 +297,8 @@ class Trainer(StateDictMixin):
 
         # Last collect
         if self._rank == 0 and not self._is_static_dataset:
-            wandb_log(self.collect_test(final=True), self.epoch)
+            #wandb_log(self.collect_test(final=True), self.epoch) # claforte: implement later
+            self.experiment.log_metric(self.collect_test(final=True))
 
     def collect_initial_dataset(self) -> Tuple[int, Logs]:
         print("\nInitial collect\n")
@@ -440,8 +444,14 @@ class Trainer(StateDictMixin):
 
     def save_checkpoint(self) -> None:
         if self._rank == 0:
+            # temporarily put comet experiment aside, to save the rest of `self`
+            experiment_backup = self.experiment
+            del self.experiment
+
             save_with_backup(self.state_dict(), self._path_state_ckpt)
             self.train_dataset.save_to_default_path()
             self.test_dataset.save_to_default_path()
             self._keep_agent_copies(self.agent.state_dict(), self.epoch)
             self._save_info_for_import_script(self.epoch)
+
+            self.experiment = experiment_backup
